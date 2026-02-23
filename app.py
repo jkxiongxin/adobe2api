@@ -56,7 +56,7 @@ RATIO_SUFFIX_MAP = {
 # OpenAI-compatible exposed model list.
 MODEL_CATALOG = {}
 
-for _res in ("1k", "2k"):
+for _res in ("1k", "2k", "4k"):
     for _ratio, _suffix in RATIO_SUFFIX_MAP.items():
         _id = f"firefly-nano-banana-pro-{_res}-{_suffix}"
         MODEL_CATALOG[_id] = {
@@ -243,6 +243,14 @@ class AdobeClient:
                 "9:16": {"width": 768, "height": 1360},
                 "4:3": {"width": 1152, "height": 864},
                 "3:4": {"width": 864, "height": 1152},
+            }
+        elif level == "4K":
+            ratio_map = {
+                "1:1": {"width": 4096, "height": 4096},
+                "16:9": {"width": 5504, "height": 3072},
+                "9:16": {"width": 3072, "height": 5504},
+                "4:3": {"width": 4096, "height": 3072},
+                "3:4": {"width": 3072, "height": 4096},
             }
         else:
             ratio_map = {
@@ -1017,7 +1025,12 @@ def _resolve_ratio_and_resolution(data: dict, model_id: Optional[str]) -> tuple[
     output_resolution = model_conf["output_resolution"]
     if not model_id:
         quality = str(data.get("quality", "2k")).lower()
-        output_resolution = "2K" if quality in ("hd", "2k") else "1K"
+        if quality in ("4k", "ultra"):
+            output_resolution = "4K"
+        elif quality in ("hd", "2k"):
+            output_resolution = "2K"
+        else:
+            output_resolution = "1K"
 
     model_ratio = model_conf.get("aspect_ratio")
     if model_ratio:
@@ -1306,7 +1319,7 @@ def create_job(data: GenerateRequest, request: Request):
         raise HTTPException(status_code=400, detail="unsupported aspect ratio")
 
     output_resolution = (data.output_resolution or "2K").upper()
-    if output_resolution not in {"1K", "2K"}:
+    if output_resolution not in {"1K", "2K", "4K"}:
         raise HTTPException(status_code=400, detail="unsupported output_resolution")
 
     # If model is provided, use model suffix mapping as source of truth.
