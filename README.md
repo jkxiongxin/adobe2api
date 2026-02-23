@@ -69,6 +69,7 @@ Current supported model families are:
 
 - `firefly-nano-banana-pro-*` (image)
 - `firefly-sora2-*` (video)
+- `firefly-veo31-fast-*` (video)
 
 Nano Banana Pro image models:
 
@@ -87,6 +88,20 @@ Sora2 video models:
 - Examples:
   - `firefly-sora2-4s-16x9`
   - `firefly-sora2-8s-9x16`
+
+Veo31 Fast video models:
+
+- Pattern: `firefly-veo31-fast-{duration}-{ratio}-{resolution}`
+- Duration: `4s` / `6s` / `8s`
+- Ratio: `16x9` / `9x16`
+- Resolution: `1080p` / `720p`
+- Supports up to 2 reference images:
+  - 1 image: first-frame reference
+  - 2 images: first-frame + last-frame reference
+- Audio defaults to enabled
+- Examples:
+  - `firefly-veo31-fast-4s-16x9-1080p`
+  - `firefly-veo31-fast-6s-9x16-720p`
 
 ### 3.1 List models
 

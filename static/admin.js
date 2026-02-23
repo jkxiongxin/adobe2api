@@ -212,6 +212,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const refreshStatus = document.getElementById("refreshStatus");
   const refreshMsg = document.getElementById("refreshMsg");
   let latestRefreshStatus = null;
+  let logsAutoTimer = null;
 
   // Logs
   const logsTbody = document.querySelector("#logsTable tbody");
@@ -420,23 +421,34 @@ document.addEventListener("DOMContentLoaded", () => {
       const data = await res.json();
       renderLogs(data.logs || []);
     } catch (err) {
-      logsTbody.innerHTML = `<tr><td colspan="7" class="empty-state" style="color: #ffb4bc;">${err.message || "日志加载失败"}</td></tr>`;
+      logsTbody.innerHTML = `<tr><td colspan="8" class="empty-state" style="color: #ffb4bc;">${err.message || "日志加载失败"}</td></tr>`;
     }
   }
 
   function renderLogs(logs) {
+    if (logsAutoTimer) {
+      clearTimeout(logsAutoTimer);
+      logsAutoTimer = null;
+    }
     if (!logs.length) {
-      logsTbody.innerHTML = `<tr><td colspan="7" class="empty-state">暂无请求日志</td></tr>`;
+      logsTbody.innerHTML = `<tr><td colspan="8" class="empty-state">暂无请求日志</td></tr>`;
       return;
     }
 
     logsTbody.innerHTML = "";
+    let hasInProgress = false;
     logs.forEach(item => {
       const tr = document.createElement("tr");
       const dt = new Date((item.ts || 0) * 1000);
       const t = Number(item.duration_sec || 0);
       const status = Number(item.status_code || 0);
       const statusClass = status >= 500 ? "log-status-5xx" : (status >= 400 ? "log-status-4xx" : "log-status-2xx");
+      const taskStatus = String(item.task_status || "").toUpperCase();
+      if (taskStatus === "IN_PROGRESS") hasInProgress = true;
+      const taskProgressRaw = Number(item.task_progress);
+      const progressCell = taskStatus === "IN_PROGRESS"
+        ? `<span class="status-badge status-active">${Number.isFinite(taskProgressRaw) ? Math.round(taskProgressRaw) : 0}%</span>`
+        : `<span style="color:#7f96ad;">-</span>`;
       const previewUrl = String(item.preview_url || "").trim();
       const previewKind = String(item.preview_kind || "").trim();
       const previewCell = previewUrl
@@ -446,6 +458,7 @@ document.addEventListener("DOMContentLoaded", () => {
         <td style="white-space: nowrap; color: #a8bfd8;">${dt.toLocaleString()}</td>
         <td><span class="status-badge ${statusClass}">${status || "-"}</span></td>
         <td style="color:#a8bfd8;">${t}</td>
+        <td>${progressCell}</td>
         <td class="token-val">${item.model || "-"}</td>
         <td title="${(item.prompt_preview || "").replace(/"/g, "&quot;")}" style="max-width: 280px; color: #a8bfd8;">${item.prompt_preview || "-"}</td>
         <td style="font-family: 'IBM Plex Mono', monospace; color:#a8bfd8;">${typeof item.proxy_used === "boolean" ? (item.proxy_used ? "是" : "否") : "-"}</td>
@@ -453,6 +466,12 @@ document.addEventListener("DOMContentLoaded", () => {
       `;
       logsTbody.appendChild(tr);
     });
+
+    if (hasInProgress) {
+      logsAutoTimer = setTimeout(() => {
+        loadLogs();
+      }, 2000);
+    }
   }
 
   function inferPreviewKind(url) {
