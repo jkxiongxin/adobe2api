@@ -67,11 +67,31 @@ Service API key is configured in `config/config.json` (`api_key`).
 
 Current supported model families are:
 
+- `firefly-nano-banana-*` (image, maps to upstream `nano-banana-2`)
+- `firefly-nano-banana2-*` (image, maps to upstream `nano-banana-3`)
 - `firefly-nano-banana-pro-*` (image)
 - `firefly-sora2-*` (video)
 - `firefly-veo31-fast-*` (video)
 
-Nano Banana Pro image models:
+Nano Banana image models (`nano-banana-2`):
+
+- Pattern: `firefly-nano-banana-{resolution}-{ratio}`
+- Resolution: `1k` / `2k` / `4k`
+- Ratio suffix: `1x1` / `16x9` / `9x16` / `4x3` / `3x4`
+- Examples:
+  - `firefly-nano-banana-2k-16x9`
+  - `firefly-nano-banana-4k-1x1`
+
+Nano Banana 2 image models (`nano-banana-3`):
+
+- Pattern: `firefly-nano-banana2-{resolution}-{ratio}`
+- Resolution: `1k` / `2k` / `4k`
+- Ratio suffix: `1x1` / `16x9` / `9x16` / `4x3` / `3x4`
+- Examples:
+  - `firefly-nano-banana2-2k-16x9`
+  - `firefly-nano-banana2-4k-1x1`
+
+Nano Banana Pro image models (legacy-compatible):
 
 - Pattern: `firefly-nano-banana-pro-{resolution}-{ratio}`
 - Resolution: `1k` / `2k` / `4k`

@@ -33,6 +33,14 @@ except Exception:
 from core.token_mgr import token_manager
 from core.config_mgr import config_manager
 from core.refresh_mgr import refresh_manager
+from core.models import (
+    MODEL_CATALOG,
+    SUPPORTED_RATIOS,
+    VIDEO_MODEL_CATALOG,
+    build_image_payload_candidates,
+    resolve_model,
+    resolve_ratio_and_resolution,
+)
 
 
 logger = logging.getLogger("adobe2api")
@@ -43,75 +51,6 @@ STATIC_DIR = BASE_DIR / "static"
 DATA_DIR = BASE_DIR / "data"
 GENERATED_DIR = DATA_DIR / "generated"
 GENERATED_DIR.mkdir(parents=True, exist_ok=True)
-
-
-SUPPORTED_RATIOS = {"1:1", "16:9", "9:16", "4:3", "3:4"}
-RATIO_SUFFIX_MAP = {
-    "1:1": "1x1",
-    "16:9": "16x9",
-    "9:16": "9x16",
-    "4:3": "4x3",
-    "3:4": "3x4",
-}
-
-# OpenAI-compatible exposed model list.
-MODEL_CATALOG = {}
-
-for _res in ("1k", "2k", "4k"):
-    for _ratio, _suffix in RATIO_SUFFIX_MAP.items():
-        _id = f"firefly-nano-banana-pro-{_res}-{_suffix}"
-        MODEL_CATALOG[_id] = {
-            "upstream_model": "google:firefly:colligo:nano-banana-pro",
-            "output_resolution": _res.upper(),
-            "aspect_ratio": _ratio,
-            "description": f"Firefly Nano Banana Pro ({_res.upper()} {_ratio})",
-        }
-DEFAULT_MODEL_ID = "firefly-nano-banana-pro-2k-16x9"
-VIDEO_MODEL_CATALOG = {
-    "firefly-sora2-4s-9x16": {
-        "duration": 4,
-        "aspect_ratio": "9:16",
-        "description": "Firefly Sora2 video model (4s 9:16)",
-    },
-    "firefly-sora2-4s-16x9": {
-        "duration": 4,
-        "aspect_ratio": "16:9",
-        "description": "Firefly Sora2 video model (4s 16:9)",
-    },
-    "firefly-sora2-8s-9x16": {
-        "duration": 8,
-        "aspect_ratio": "9:16",
-        "description": "Firefly Sora2 video model (8s 9:16)",
-    },
-    "firefly-sora2-8s-16x9": {
-        "duration": 8,
-        "aspect_ratio": "16:9",
-        "description": "Firefly Sora2 video model (8s 16:9)",
-    },
-    "firefly-sora2-12s-9x16": {
-        "duration": 12,
-        "aspect_ratio": "9:16",
-        "description": "Firefly Sora2 video model (12s 9:16)",
-    },
-    "firefly-sora2-12s-16x9": {
-        "duration": 12,
-        "aspect_ratio": "16:9",
-        "description": "Firefly Sora2 video model (12s 16:9)",
-    },
-}
-
-for _dur in (4, 6, 8):
-    for _ratio in ("16:9", "9:16"):
-        for _res in ("1080p", "720p"):
-            _model_id = f"firefly-veo31-fast-{_dur}s-{RATIO_SUFFIX_MAP[_ratio]}-{_res}"
-            VIDEO_MODEL_CATALOG[_model_id] = {
-                "engine": "veo31-fast",
-                "upstream_model": "google:firefly:colligo:veo31-fast",
-                "duration": _dur,
-                "aspect_ratio": _ratio,
-                "resolution": _res,
-                "description": f"Firefly Veo31 Fast video model ({_dur}s {_ratio} {_res})",
-            }
 
 
 class AdobeRequestError(Exception):
@@ -497,35 +436,6 @@ class AdobeClient:
             )
         return resp
 
-    @staticmethod
-    def _size_from_ratio(ratio: str, output_resolution: str = "2K") -> dict:
-        level = (output_resolution or "2K").upper()
-        if level == "1K":
-            ratio_map = {
-                "1:1": {"width": 1024, "height": 1024},
-                "16:9": {"width": 1360, "height": 768},
-                "9:16": {"width": 768, "height": 1360},
-                "4:3": {"width": 1152, "height": 864},
-                "3:4": {"width": 864, "height": 1152},
-            }
-        elif level == "4K":
-            ratio_map = {
-                "1:1": {"width": 4096, "height": 4096},
-                "16:9": {"width": 5504, "height": 3072},
-                "9:16": {"width": 3072, "height": 5504},
-                "4:3": {"width": 4096, "height": 3072},
-                "3:4": {"width": 3072, "height": 4096},
-            }
-        else:
-            ratio_map = {
-                "1:1": {"width": 2048, "height": 2048},
-                "16:9": {"width": 2752, "height": 1536},
-                "9:16": {"width": 1536, "height": 2752},
-                "4:3": {"width": 2048, "height": 1536},
-                "3:4": {"width": 1536, "height": 2048},
-            }
-        return ratio_map.get(ratio, ratio_map["16:9"])
-
     def upload_image(
         self, token: str, image_bytes: bytes, mime_type: str = "image/jpeg"
     ) -> str:
@@ -568,50 +478,18 @@ class AdobeClient:
         prompt: str,
         aspect_ratio: str,
         output_resolution: str,
+        upstream_model_id: str,
+        upstream_model_version: str,
         source_image_ids: Optional[list[str]] = None,
     ) -> list[dict]:
-        base_payload = {
-            "modelId": "gemini-flash",
-            "modelVersion": "nano-banana-2",
-            "n": 1,
-            "prompt": prompt,
-            "size": self._size_from_ratio(aspect_ratio, output_resolution),
-            "seeds": [int(time.time()) % 999999],
-            "groundSearch": False,
-            "skipCai": False,
-            "output": {"storeInputs": True},
-            "generationMetadata": {"module": "text2image"},
-            "modelSpecificPayload": {
-                "aspectRatio": aspect_ratio,
-                "parameters": {"addWatermark": False},
-            },
-        }
-
-        if not source_image_ids:
-            base_payload["referenceBlobs"] = []
-            return [base_payload]
-
-        candidates: list[dict] = []
-        edited = dict(base_payload)
-        edited["generationMetadata"] = {"module": "image2image"}
-
-        c1 = dict(edited)
-        c1["referenceBlobs"] = [
-            {"id": img_id, "usage": "general"} for img_id in source_image_ids
-        ]
-        candidates.append(c1)
-
-        c4 = dict(edited)
-        c4["referenceBlobs"] = []
-        c4["imagePrompt"] = {"referenceImage": source_image_ids[0]}
-        candidates.append(c4)
-
-        c5 = dict(edited)
-        c5["referenceBlobs"] = []
-        c5["imagePrompt"] = {"referenceImage": {"id": source_image_ids[0]}}
-        candidates.append(c5)
-
-        return candidates
+        return build_image_payload_candidates(
+            prompt=prompt,
+            aspect_ratio=aspect_ratio,
+            output_resolution=output_resolution,
+            upstream_model_id=upstream_model_id,
+            upstream_model_version=upstream_model_version,
+            source_image_ids=source_image_ids,
+        )
 
     @staticmethod
     def _video_size(aspect_ratio: str, resolution: str = "720p") -> dict:
@@ -1025,6 +903,8 @@ class AdobeClient:
         prompt: str,
         aspect_ratio: str = "16:9",
         output_resolution: str = "2K",
+        upstream_model_id: str = "gemini-flash",
+        upstream_model_version: str = "nano-banana-2",
         source_image_ids: Optional[list[str]] = None,
         timeout: int = 180,
         progress_cb: Optional[Callable[[dict], None]] = None,
@@ -1035,6 +915,8 @@ class AdobeClient:
             prompt=prompt,
             aspect_ratio=aspect_ratio,
             output_resolution=output_resolution,
+            upstream_model_id=upstream_model_id,
+            upstream_model_version=upstream_model_version,
             source_image_ids=source_image_ids,
         ):
             # 禁用重试等，最大程度节省资源
@@ -1926,29 +1808,6 @@ class RefreshProfileEnabledRequest(BaseModel):
     enabled: bool
 
 
-def _resolve_model(model_id: Optional[str]) -> dict:
-    if not model_id:
-        return MODEL_CATALOG[DEFAULT_MODEL_ID]
-    if model_id not in MODEL_CATALOG:
-        raise HTTPException(status_code=400, detail=f"Invalid model: {model_id}")
-    return MODEL_CATALOG[model_id]
-
-
-def _ratio_from_size(size: str) -> str:
-    mapping = {
-        "1024x1024": "1:1",
-        "1536x1536": "1:1",
-        "2048x2048": "1:1",
-        "1024x1792": "9:16",
-        "1536x2752": "9:16",
-        "1792x1024": "16:9",
-        "2752x1536": "16:9",
-        "2048x1536": "4:3",
-        "1536x2048": "3:4",
-    }
-    return mapping.get(str(size or "").strip(), "1:1")
-
-
 def _resolve_video_options(data: dict) -> tuple[bool, str]:
     generate_audio = bool(data.get("generate_audio", data.get("generateAudio", True)))
     negative_prompt = str(
@@ -2254,37 +2113,6 @@ def _prepare_video_source_image(
         raise
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"invalid image for video: {exc}")
-
-
-def _resolve_ratio_and_resolution(
-    data: dict, model_id: Optional[str]
-) -> tuple[str, str, str]:
-    ratio = str(data.get("aspect_ratio") or "").strip() or _ratio_from_size(
-        data.get("size", "1024x1024")
-    )
-    if ratio not in SUPPORTED_RATIOS:
-        ratio = "1:1"
-
-    resolved_model_id = model_id or DEFAULT_MODEL_ID
-    if resolved_model_id not in MODEL_CATALOG:
-        resolved_model_id = DEFAULT_MODEL_ID
-    model_conf = MODEL_CATALOG[resolved_model_id]
-
-    output_resolution = model_conf["output_resolution"]
-    if not model_id:
-        quality = str(data.get("quality", "2k")).lower()
-        if quality in ("4k", "ultra"):
-            output_resolution = "4K"
-        elif quality in ("hd", "2k"):
-            output_resolution = "2K"
-        else:
-            output_resolution = "1K"
-
-    model_ratio = model_conf.get("aspect_ratio")
-    if model_ratio:
-        ratio = model_ratio
-
-    return ratio, output_resolution, resolved_model_id
 
 
 def _extract_access_key(request: Request) -> str:
@@ -3023,9 +2851,10 @@ def openai_generate(data: dict, request: Request):
                 }
             },
         )
-    ratio, output_resolution, resolved_model_id = _resolve_ratio_and_resolution(
+    ratio, output_resolution, resolved_model_id = resolve_ratio_and_resolution(
         data, model_id
     )
+    model_conf = resolve_model(resolved_model_id)
 
     try:
         _set_request_task_progress(
@@ -3048,6 +2877,12 @@ def openai_generate(data: dict, request: Request):
                 prompt=prompt,
                 aspect_ratio=ratio,
                 output_resolution=output_resolution,
+                upstream_model_id=str(
+                    model_conf.get("upstream_model_id") or "gemini-flash"
+                ),
+                upstream_model_version=str(
+                    model_conf.get("upstream_model_version") or "nano-banana-2"
+                ),
                 timeout=client.generate_timeout,
                 progress_cb=_image_progress_cb,
             )
@@ -3153,9 +2988,9 @@ def create_job(data: GenerateRequest, request: Request):
     if output_resolution not in {"1K", "2K", "4K"}:
         raise HTTPException(status_code=400, detail="unsupported output_resolution")
 
+    model_conf = resolve_model(data.model)
     # If model is provided, use model suffix mapping as source of truth.
     if data.model:
-        model_conf = _resolve_model(data.model)
         output_resolution = model_conf["output_resolution"]
 
     job = store.create(prompt=prompt, aspect_ratio=ratio)
@@ -3177,6 +3012,12 @@ def create_job(data: GenerateRequest, request: Request):
                     prompt=prompt,
                     aspect_ratio=ratio,
                     output_resolution=output_resolution,
+                    upstream_model_id=str(
+                        model_conf.get("upstream_model_id") or "gemini-flash"
+                    ),
+                    upstream_model_version=str(
+                        model_conf.get("upstream_model_version") or "nano-banana-2"
+                    ),
                 )
                 out_path = GENERATED_DIR / f"{job_id}.png"
                 out_path.write_bytes(image_bytes)
@@ -3279,9 +3120,10 @@ def chat_completions(data: dict, request: Request):
     if is_video_model:
         generate_audio, negative_prompt = _resolve_video_options(data)
     else:
-        ratio, output_resolution, resolved_model_id = _resolve_ratio_and_resolution(
+        ratio, output_resolution, resolved_model_id = resolve_ratio_and_resolution(
             data, model_id or None
         )
+    image_model_conf = resolve_model(resolved_model_id) if not is_video_model else {}
 
     try:
         input_images = _load_input_images(data.get("messages") or [])
@@ -3364,6 +3206,13 @@ def chat_completions(data: dict, request: Request):
                     prompt=prompt,
                     aspect_ratio=ratio,
                     output_resolution=output_resolution,
+                    upstream_model_id=str(
+                        image_model_conf.get("upstream_model_id") or "gemini-flash"
+                    ),
+                    upstream_model_version=str(
+                        image_model_conf.get("upstream_model_version")
+                        or "nano-banana-2"
+                    ),
                     source_image_ids=source_image_ids,
                     timeout=client.generate_timeout,
                     progress_cb=_image_progress_cb,
