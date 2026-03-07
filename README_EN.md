@@ -1,8 +1,19 @@
 # adobe2api
 
+---
+
+### ✨ Ad Spot (o゜▽゜)o☆
+
+This is my independently built and actively maintained personal website: [**Pixelle Labs**](https://www.pixellelabs.com/)
+
+I share **AI creative tools**, image/video mini-products, and fun experiments here. You are welcome to explore, try everything out, and play around (๑•̀ㅂ•́)و✧. Feedback, ideas, and collaboration discussions are always appreciated! ヾ(≧▽≦*)o
+
+---
+
 Adobe Firefly/OpenAI-compatible gateway service.
 
 Chinese README: `README.md`
+
 
 Current design:
 
@@ -11,51 +22,35 @@ Current design:
 - Token pool management (manual token + auto-refresh token)
 - Admin web UI: token/config/logs/refresh profile import
 
-## 1) Run
+## 1) Deployment
 
-Install dependencies:
+### A. Local Run
+
+1. **Install dependencies**:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Start service (run in `adobe2api/`):
+2. **Start service** (run in `adobe2api/`):
 
 ```bash
 uvicorn app:app --host 0.0.0.0 --port 6001 --reload
 ```
 
-Open admin UI:
+3. **Access Admin UI**:
 
-- `http://127.0.0.1:6001/`
-- Default admin login: `admin / admin`
-- You can change credentials in `系统配置` after login, or via `config/config.json` (`admin_username`, `admin_password`)
+- URL: `http://127.0.0.1:6001/`
+- Default login: `admin / admin`
+- You can change credentials in "系统配置" (System Config) or edit `config/config.json`
 
-### Docker deployment
+### B. Docker Deployment (Recommended)
 
-This project supports Docker and Docker Compose.
-
-Build + run (Docker):
-
-```bash
-docker build -t adobe2api .
-docker run -d --name adobe2api \
-  -p 6001:6001 \
-  -e TZ=Asia/Shanghai \
-  -e PORT=6001 \
-  -e ADOBE_API_KEY=clio-playground-web \
-  -v ./data:/app/data \
-  -v ./config:/app/config \
-  adobe2api
-```
-
-Run with Compose:
+This project provides Docker support. It is recommended to use Docker Compose for one-click deployment:
 
 ```bash
 docker compose up -d --build
 ```
-
-Compose file: `docker-compose.yml`
 
 ## 2) Auth to this service
 
@@ -257,41 +252,39 @@ curl -X POST "http://127.0.0.1:6001/v1/images/generations" \
   }'
 ```
 
-## 4) Admin APIs
+## 4) Cookie Import
 
-- `GET /api/v1/tokens`
-- `POST /api/v1/tokens`
-- `DELETE /api/v1/tokens/{id}`
-- `PUT /api/v1/tokens/{id}/status?status=active|disabled`
-- `POST /api/v1/tokens/{id}/refresh`
-- `GET /api/v1/config`
-- `PUT /api/v1/config`
-- `GET /api/v1/logs?limit=200`
-- `DELETE /api/v1/logs`
-- `GET /api/v1/refresh-profiles`
-- `POST /api/v1/refresh-profiles/import-cookie`
-- `POST /api/v1/refresh-profiles/import-cookie-batch`
-- `POST /api/v1/refresh-profiles/{id}/refresh-now`
-- `PUT /api/v1/refresh-profiles/{id}/enabled`
-- `DELETE /api/v1/refresh-profiles/{id}`
+### Step 1: Export using the Browser Extension (Recommended)
 
-## 5) Cookie import usage
+This project includes a companion browser extension to help you easily export required cookies from the Adobe Firefly page.
 
-Import flow:
+- Extension source: `browser-cookie-exporter/`
+- Exports a minimal `cookie_*.json` (containing only the `cookie` field)
+- Detailed instructions: `browser-cookie-exporter/README.md`
 
-1. Open admin UI `Token 管理` tab
-2. Click `导入 Cookie`
-3. Paste Cookie string or cookie JSON, or upload `.txt/.json`
-4. Click `导入 Cookie` (service auto-runs one refresh immediately)
-5. Token list will show one `自动刷新=是` token per refresh profile
+**Installation & Usage:**
 
-Batch import notes:
+1. Open Chrome or Edge extension management: `chrome://extensions`
+2. Enable "Developer mode" in the top right
+3. Click "Load unpacked" and select the `browser-cookie-exporter/` directory from this project
+4. Log in to [Adobe Firefly](https://firefly.adobe.com/) as usual
+5. Click the extension icon in your browser toolbar and select the export scope
+6. Click "Export Minimal JSON" and save the file
 
-- You can upload multiple files at once in the import dialog
-- Or paste JSON array:
-  - `[{"name":"account-a","cookie":"k1=v1; k2=v2"}, {"name":"account-b","cookie":[{"name":"k1","value":"v1"}]}]`
+### Step 2: Import into the Project
 
-## 6) Storage paths
+Once you have the exported JSON file, follow these steps to import it:
+
+1. Access and log in to the admin UI (default `http://127.0.0.1:6001/`)
+2. Navigate to the "Token 管理" (Token Management) tab
+3. Click the "导入 Cookie" (Import Cookie) button
+4. **Option A:** Paste the JSON content into the text box; **Option B:** Upload the exported `.json` file directly
+5. Click "Confirm Import" (the service will verify the cookies and run an initial refresh)
+6. Upon success, the token will appear in the list with `自动刷新` (Auto Refresh) set to "Yes"
+
+**Batch Import:** The import dialog supports uploading multiple files at once or pasting a JSON array containing multiple account credentials.
+
+## 5) Storage Paths
 
 - Generated media: `data/generated/`
 - Request logs: `data/request_logs.jsonl`
@@ -306,25 +299,3 @@ Generated media retention policy:
   - `generated_max_size_mb` (default `1024`)
   - `generated_prune_size_mb` (default `200`)
 - When total generated file size exceeds `generated_max_size_mb`, service deletes old files until at least `generated_prune_size_mb` is reclaimed and total size falls back under threshold
-
-## 7) Security notes
-
-- Cookie data contains high-sensitivity session data.
-- Do not commit/share cookie export files.
-- Rotate Adobe session if sensitive data was exposed.
-
-## 8) Browser Cookie Export Extension
-
-- A Chrome/Edge extension is included at `browser-cookie-exporter/`.
-- It exports minimal `cookie_*.json` files (only the `cookie` field).
-- See details in `browser-cookie-exporter/README.md`.
-
-Extension usage:
-
-1. Open the extensions page: `chrome://extensions` (or `edge://extensions`)
-2. Enable Developer mode
-3. Click Load unpacked and select `browser-cookie-exporter/`
-4. Log in to Adobe/Firefly in your browser
-5. Click the extension icon and choose export scope
-6. Click `Export Minimal JSON`
-7. Use the exported JSON with the `adobe2api` cookie import API

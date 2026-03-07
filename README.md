@@ -1,8 +1,19 @@
 # adobe2api
 
+---
+
+### ✨ 广告时间 (o゜▽゜)o☆
+
+这是我个人独立搭建和长期维护的网站：[**Pixelle Labs**](https://www.pixellelabs.com/)
+
+主要分享我正在开发的 **AI 创意工具**、图像/视频相关小产品和各种有趣实验。欢迎大家来逛逛、免费体验、随便玩耍 (๑•̀ㅂ•́)و✧；如果你有想法或需求，也非常欢迎反馈交流！ヾ(≧▽≦*)o
+
+---
+
 Adobe Firefly / OpenAI 兼容网关服务。
 
 English README: `README_EN.md`
+
 
 当前设计：
 
@@ -11,51 +22,35 @@ English README: `README_EN.md`
 - Token 池管理（手动 Token + 自动刷新 Token）
 - 管理后台 Web UI：Token / 配置 / 日志 / 刷新配置导入
 
-## 1）运行服务
+## 1）部署方式
 
-安装依赖：
+### A. 本地开发/运行
+
+1. **安装依赖**：
 
 ```bash
 pip install -r requirements.txt
 ```
 
-启动服务（在 `adobe2api/` 目录下执行）：
+2. **启动服务**（在 `adobe2api/` 目录下执行）：
 
 ```bash
 uvicorn app:app --host 0.0.0.0 --port 6001 --reload
 ```
 
-打开管理后台：
+3. **访问管理后台**：
 
-- `http://127.0.0.1:6001/`
-- 默认管理员账号密码：`admin / admin`
-- 登录后可在「系统配置」修改，或直接编辑 `config/config.json`（`admin_username`、`admin_password`）
+- 地址：`http://127.0.0.1:6001/`
+- 默认账号密码：`admin / admin`
+- 登录后可在「系统配置」修改，或编辑 `config/config.json`
 
-### Docker 部署
+### B. Docker 部署 (推荐)
 
-本项目支持 Docker 和 Docker Compose。
-
-构建并运行（Docker）：
-
-```bash
-docker build -t adobe2api .
-docker run -d --name adobe2api \
-  -p 6001:6001 \
-  -e TZ=Asia/Shanghai \
-  -e PORT=6001 \
-  -e ADOBE_API_KEY=clio-playground-web \
-  -v ./data:/app/data \
-  -v ./config:/app/config \
-  adobe2api
-```
-
-使用 Compose 启动：
+本项目已提供 Docker 支持，推荐使用 Docker Compose 一键启动：
 
 ```bash
 docker compose up -d --build
 ```
-
-Compose 文件：`docker-compose.yml`
 
 ## 2）服务鉴权
 
@@ -257,41 +252,39 @@ curl -X POST "http://127.0.0.1:6001/v1/images/generations" \
   }'
 ```
 
-## 4）管理 API
+## 4）Cookie 导入
 
-- `GET /api/v1/tokens`
-- `POST /api/v1/tokens`
-- `DELETE /api/v1/tokens/{id}`
-- `PUT /api/v1/tokens/{id}/status?status=active|disabled`
-- `POST /api/v1/tokens/{id}/refresh`
-- `GET /api/v1/config`
-- `PUT /api/v1/config`
-- `GET /api/v1/logs?limit=200`
-- `DELETE /api/v1/logs`
-- `GET /api/v1/refresh-profiles`
-- `POST /api/v1/refresh-profiles/import-cookie`
-- `POST /api/v1/refresh-profiles/import-cookie-batch`
-- `POST /api/v1/refresh-profiles/{id}/refresh-now`
-- `PUT /api/v1/refresh-profiles/{id}/enabled`
-- `DELETE /api/v1/refresh-profiles/{id}`
+### 第一步：使用浏览器插件导出（推荐）
 
-## 5）Cookie 导入说明
+本项目提供了一个配套的浏览器插件，可以方便地从 Adobe Firefly 页面导出所需的 Cookie 数据。
 
-导入流程：
+- 插件源码位置：`browser-cookie-exporter/`
+- 可导出最简 `cookie_*.json`（仅包含 `cookie` 字段）
+- 详细说明见：`browser-cookie-exporter/README.md`
 
-1. 打开管理后台「Token 管理」页签
-2. 点击「导入 Cookie」
-3. 粘贴 Cookie 字符串 / Cookie JSON，或上传 `.txt/.json`
-4. 点击「导入 Cookie」（服务会立即自动执行一次刷新）
-5. Token 列表中会显示每个刷新配置对应的一条 `自动刷新=是` 的 Token
+**插件安装与使用步骤：**
 
-批量导入说明：
+1. 打开 Chrome 或 Edge 浏览器的扩展管理页：`chrome://extensions`
+2. 开启右上角的「开发者模式」
+3. 点击「加载已解压的扩展程序」，选择项目中的 `browser-cookie-exporter/` 目录
+4. 在浏览器中正常登录 [Adobe Firefly](https://firefly.adobe.com/)
+5. 点击浏览器工具栏的插件图标，选择导出范围
+6. 点击「导出最简 JSON」并保存文件
 
-- 导入弹窗支持一次上传多个文件
-- 或粘贴 JSON 数组：
-  - `[{"name":"account-a","cookie":"k1=v1; k2=v2"}, {"name":"account-b","cookie":[{"name":"k1","value":"v1"}]}]`
+### 第二步：导入到项目中
 
-## 6）存储路径
+拿到导出的 JSON 文件后，按照以下流程导入服务：
+
+1. 访问并登录管理后台（默认 `http://127.0.0.1:6001/`）
+2. 打开「Token 管理」页签
+3. 点击「导入 Cookie」按钮
+4. **方式 A：** 粘贴 JSON 文件内容到文本框；**方式 B：** 直接上传导出的 `.json` 文件
+5. 点击「确认导入」（服务会自动验证 Cookie 并执行一次刷新）
+6. 导入成功后，Token 列表中会显示对应的 Token，且 `自动刷新` 状态为「是」
+
+**批量导入：** 导入弹窗支持一次上传多个文件，或粘贴包含多个账户信息的 JSON 数组。
+
+## 5）存储路径
 
 - 生成媒体文件：`data/generated/`
 - 请求日志：`data/request_logs.jsonl`
@@ -305,26 +298,4 @@ curl -X POST "http://127.0.0.1:6001/v1/images/generations" \
 - 启用按容量阈值自动清理（最旧文件优先）
   - `generated_max_size_mb`（默认 `1024`）
   - `generated_prune_size_mb`（默认 `200`）
-- 当总大小超过 `generated_max_size_mb` 时，服务会删除旧文件，直到至少回收 `generated_prune_size_mb` 且总大小降回阈值以内
-
-## 7）安全建议
-
-- Cookie 数据包含高敏感会话信息。
-- 不要提交或分享 Cookie 导出文件。
-- 如果敏感信息泄露，请及时轮换 Adobe 会话。
-
-## 8）浏览器 Cookie 导出插件
-
-- 已提供 Chrome/Edge 插件：`browser-cookie-exporter/`
-- 可导出最简 `cookie_*.json`（仅包含 `cookie` 字段）
-- 详细说明见：`browser-cookie-exporter/README.md`
-
-插件使用步骤：
-
-1. 打开扩展管理页：`chrome://extensions`（或 `edge://extensions`）
-2. 开启「开发者模式」
-3. 点击「加载已解压的扩展程序」，选择目录 `browser-cookie-exporter/`
-4. 在浏览器中登录 Adobe/Firefly
-5. 点击插件图标，选择导出范围
-6. 点击「导出最简 JSON」
-7. 将导出的 JSON 用于 `adobe2api` 的 Cookie 导入接口
+- 当总大小超过 `generated_max_size_mb` 时，服务会删除旧文件，直到至少回收 `generated_prune_size_mb`且总大小降回阈值以内
