@@ -15,7 +15,9 @@ from urllib.parse import unquote_to_bytes
 
 import requests
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.background import BackgroundTask
 from starlette.middleware.sessions import SessionMiddleware
 
 from api.routes.admin import build_admin_router
@@ -69,6 +71,19 @@ _generated_file_count = 0
 _generated_last_reconcile_ts = 0.0
 
 
+def _drop_generated_file_cache(file_path: Path) -> None:
+    if not hasattr(os, "posix_fadvise"):
+        return
+    if not file_path.exists():
+        return
+    try:
+        flag = getattr(os, "POSIX_FADV_DONTNEED", 4)
+        with file_path.open("rb") as f:
+            os.posix_fadvise(f.fileno(), 0, 0, flag)
+    except Exception:
+        return
+
+
 # 极简配置启动
 app = FastAPI(
     title="adobe2api",
@@ -89,7 +104,19 @@ app.add_middleware(
     https_only=False,
 )
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-app.mount("/generated", StaticFiles(directory=GENERATED_DIR), name="generated_files")
+
+
+@app.get("/generated/{filename:path}", include_in_schema=False)
+def serve_generated_file(filename: str):
+    raw = str(filename or "").strip()
+    safe_name = Path(raw).name
+    if not safe_name or safe_name != raw:
+        raise HTTPException(status_code=404, detail="file not found")
+    target = GENERATED_DIR / safe_name
+    if not target.exists() or not target.is_file():
+        raise HTTPException(status_code=404, detail="file not found")
+    background = BackgroundTask(_drop_generated_file_cache, target)
+    return FileResponse(path=target, filename=safe_name, background=background)
 
 store = JobStore()
 log_store = RequestLogStore(DATA_DIR / "request_logs.jsonl", max_items=5000)
